@@ -16,7 +16,7 @@ cursor = conn.cursor()
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    user_id INTEGER UNIQUE,
     username TEXT
 )
 ''')
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS places (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
+    name TEXT UNIQUE,
     description TEXT,
     photo_path TEXT,
     latitude REAL,
@@ -57,20 +57,22 @@ def add_user(user_id, username):
 
 
 def add_place(name, description, photo_path, latitude=None, longitude=None):
+    """Добавляет место, если такого ещё нет."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO places (name, description, photo_path, latitude, longitude) VALUES (?, ?, ?, ?, ?)",
-        (name, description, photo_path, latitude, longitude)
-    )
+    cursor.execute("""
+        INSERT OR IGNORE INTO places (name, description, photo_path, latitude, longitude)
+        VALUES (?, ?, ?, ?, ?)
+    """, (name, description, photo_path, latitude, longitude))
     conn.commit()
     conn.close()
 
 
 def get_places():
+    """Возвращает список всех достопримечательностей без дублей."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM places")
+    cursor.execute("SELECT id, name, description, photo_path, latitude, longitude FROM places GROUP BY name")
     result = cursor.fetchall()
     conn.close()
     return result
@@ -79,7 +81,7 @@ def get_places():
 def add_favorite(user_id, place_id):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO favorites (user_id, place_id) VALUES (?, ?)", (user_id, place_id))
+    cursor.execute("INSERT OR IGNORE INTO favorites (user_id, place_id) VALUES (?, ?)", (user_id, place_id))
     conn.commit()
     conn.close()
 
@@ -88,7 +90,7 @@ def get_favorites(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT p.name, p.description
+        SELECT DISTINCT p.name, p.description
         FROM favorites f
         JOIN places p ON f.place_id = p.id
         WHERE f.user_id = ?

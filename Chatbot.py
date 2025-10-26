@@ -3,13 +3,14 @@ import telebot
 from telebot import types
 import database
 import requests
+from flask import Flask, request
 
-# 🔑 Твои ключи
-TOKEN = "8240275661:AAFXDbOJj8Kqw0cTJKqDZJWSS9BXE7i-E_A"
-YANDEX_API_KEY = "demo_yandex_weather_api_key_ca6d09349ba0"
+# 🔑 Ключи и токены
+TOKEN = os.getenv("BOT_TOKEN", "8240275661:AAFXDbOJj8Kqw0cTJKqDZJWSS9BXE7i-E_A")
+YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "demo_yandex_weather_api_key_ca6d09349ba0")
 
 bot = telebot.TeleBot(TOKEN)
-
+app = Flask(__name__)
 
 # 🧭 Главное меню (нижние кнопки)
 def main_menu():
@@ -45,7 +46,6 @@ def handle_text(message):
 
         keyboard = types.InlineKeyboardMarkup()
         for place in places:
-            # place = (id, name, description, photo_path, lat, lon)
             keyboard.add(types.InlineKeyboardButton(text=place[1], callback_data=f"place_{place[0]}"))
 
         bot.send_message(
@@ -111,7 +111,6 @@ def callback_place(call):
                 bot.send_photo(call.message.chat.id, photo, caption=f"{place[1]}\n\n{place[2]}", reply_markup=markup)
         else:
             bot.send_message(call.message.chat.id, f"{place[1]}\n\n{place[2]}", reply_markup=markup)
-
     else:
         bot.send_message(call.message.chat.id, "⚠️ Не удалось найти информацию о месте.")
 
@@ -153,10 +152,31 @@ def send_weather(chat_id):
             f"Состояние: {conditions.get(condition, condition)}"
         )
         bot.send_message(chat_id, text)
-
     except Exception as e:
         bot.send_message(chat_id, f"⚠️ Не удалось получить погоду.\nОшибка: {e}")
 
 
-# 🔹 Запуск
-bot.polling(none_stop=True)
+# ======================
+# 🔹 Flask сервер для Render
+# ======================
+@app.route('/' + TOKEN, methods=['POST'])
+def get_message():
+    json_str = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return '!', 200
+
+
+@app.route('/')
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
+    return 'Webhook set!', 200
+
+
+# ======================
+# 🔹 Запуск приложения
+# ======================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
